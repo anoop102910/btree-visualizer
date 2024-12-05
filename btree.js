@@ -270,6 +270,16 @@ class BTree {
             return false;
         }
     }
+
+    async search(value) {
+        if (!this.root) {
+            await this.visualizeStep('Tree is empty');
+            return false;
+        }
+
+        await this.visualizeStep(`Starting search for ${value}`);
+        return await this.root.search(value, this);
+    }
 }
 
 class BTreeNode {
@@ -620,6 +630,51 @@ class BTreeNode {
             return await this.children[index].delete(key, tree);
         }
     }
+
+    async search(value, tree) {
+        let i = 0;
+        
+        // Compare with each key in current node
+        for (let i = 0; i < this.keys.length; i++) {
+            await tree.visualizeStep(
+                `Comparing ${value} with ${this.keys[i]}`,
+                { comparingKey: this.keys[i], value: value }
+            );
+            
+            if (value === this.keys[i]) {
+                await tree.visualizeStep(
+                    `Found ${value}!`,
+                    { compareKey: this.keys[i] }  // Highlight in yellow when found
+                );
+                return true;
+            }
+            
+            if (value < this.keys[i]) {
+                if (this.isLeaf) {
+                    await tree.visualizeStep(`${value} not found in tree`);
+                    return false;
+                }
+                await tree.visualizeStep(
+                    `${value} is less than ${this.keys[i]}, moving to left child`,
+                    { comparingKey: this.keys[i], value: value }
+                );
+                return await this.children[i].search(value, tree);
+            }
+        }
+
+        // If we've gone through all keys and haven't found it or returned
+        if (this.isLeaf) {
+            await tree.visualizeStep(`${value} not found in tree`);
+            return false;
+        }
+
+        // If not leaf, search the last child
+        await tree.visualizeStep(
+            `${value} is greater than all keys, moving to rightmost child`,
+            { comparingKey: this.keys[this.keys.length - 1], value: value }
+        );
+        return await this.children[this.keys.length].search(value, tree);
+    }
 }
 
 // Update the initialization event listeners
@@ -729,6 +784,29 @@ document.getElementById("initializeRandomButton").addEventListener("click", asyn
         alert(`B-tree initialized with ${count} random values`);
     } else {
         alert("Please enter valid numbers for key size and count");
+    }
+});
+
+document.getElementById("searchButton").addEventListener("click", async () => {
+    if (!bTree) {
+        alert("Please initialize the tree first!");
+        return;
+    }
+
+    const value = parseInt(document.getElementById("searchInput").value);
+    if (!isNaN(value)) {
+        document.getElementById("searchButton").disabled = true;
+        const found = await bTree.search(value);
+        document.getElementById("searchButton").disabled = false;
+        document.getElementById("searchInput").value = "";
+        
+        if (found) {
+            alert(`Found ${value} in the tree!`);
+        } else {
+            alert(`${value} not found in the tree.`);
+        }
+    } else {
+        alert("Please enter a valid number");
     }
 });
 
