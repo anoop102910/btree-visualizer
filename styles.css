@@ -28,10 +28,10 @@ body {
     border: 1px solid #333;
     border-radius: 5px;
     margin: 20px auto;
-    max-width: 1000px;
+    max-width: 1300px;
     background-color: #242424;
     padding: 20px;
-    min-height: 600px;
+    min-height: 400px;
 }
 
 .controls {
@@ -39,7 +39,7 @@ body {
     padding: 20px;
     background: #2d2d2d;
     border-radius: 5px;
-    max-width: 1000px;
+    max-width: 1300px;
 }
 
 input, button {
@@ -163,7 +163,7 @@ button:hover {
     background: #2d2d2d;
     border-radius: 5px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    max-width: 1000px;
+    max-width: 1300px;
     margin: 15px auto;
     padding: 12px 20px;
     background: linear-gradient(to right, #2d2d2d, #333);
@@ -186,6 +186,34 @@ button:hover {
 }
 
 #updateOldInput, #updateNewInput {
+    width: 100px;
+    margin-right: 10px;
+    padding: 5px;
+}
+
+.tooltip-bg {
+    fill: #333;
+    opacity: 0.9;
+}
+
+.tooltip-text {
+    font-size: 14px;
+    font-weight: bold;
+    fill: #ffffff;
+}
+
+.tooltip {
+    pointer-events: none;
+    z-index: 100;
+}
+
+.comparison-tooltip {
+    font-weight: bold;
+    fill: #FFD700;
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5));
+}
+
+#randomCountInput {
     width: 100px;
     margin-right: 10px;
     padding: 5px;

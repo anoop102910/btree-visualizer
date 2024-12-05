@@ -1,10 +1,11 @@
 function renderTree(tree, stepDescription = '', highlightInfo = null) {
     d3.select("#bTreeContainer").select("svg").remove();
     d3.select("#stepDescription").text("");
+    d3.selectAll(".comparison-tooltip").remove();
     
     const margin = {top: 60, right: 40, bottom: 40, left: 40};
-    const width = 900 - margin.left - margin.right;
-    const height = 500 - margin.top - margin.bottom;
+    const width = 1200 - margin.left - margin.right;
+    const height = 300 - margin.top - margin.bottom;
 
     if (!document.getElementById("stepDescription")) {
         const descDiv = document.createElement("div");
@@ -26,6 +27,23 @@ function renderTree(tree, stepDescription = '', highlightInfo = null) {
         .attr("height", height + margin.top + margin.bottom)
         .append("g")
         .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    const tooltip = svg.append("g")
+        .attr("class", "tooltip")
+        .style("opacity", 0);
+    
+    tooltip.append("rect")
+        .attr("class", "tooltip-bg")
+        .attr("rx", 4)
+        .attr("ry", 4)
+        .attr("fill", "#333")
+        .attr("opacity", 0.9);
+
+    tooltip.append("text")
+        .attr("class", "tooltip-text")
+        .attr("fill", "#fff")
+        .attr("text-anchor", "middle")
+        .attr("dy", "0.35em");
 
     const hierarchy = d3.hierarchy(tree.visualize());
     const treeLayout = d3.tree().size([width, height]);
@@ -89,8 +107,17 @@ function renderTree(tree, stepDescription = '', highlightInfo = null) {
         .attr("height", 50)
         .attr("rx", 4)
         .attr("ry", 4)
-        .attr("fill", (d, i) => {
+        .attr("fill", (d, i, nodes) => {
             if (highlightInfo && highlightInfo.comparingKey === d.key) {
+                const keyGroup = d3.select(nodes[i].parentNode);
+                keyGroup.append("text")
+                    .attr("class", "comparison-tooltip")
+                    .attr("text-anchor", "middle")
+                    .attr("y", 45)
+                    .attr("fill", "#ffffff")
+                    .attr("font-size", "12px")
+                    .text(`Comparing with ${highlightInfo.value}`);
+                
                 return "#ff4444";
             }
             if (highlightInfo && highlightInfo.compareKey === d.key) {
@@ -100,15 +127,6 @@ function renderTree(tree, stepDescription = '', highlightInfo = null) {
                 return "#2d5a27";
             }
             return d.isLeaf ? "#2d5a27" : "#1a472a";
-        })
-        .attr("stroke", "#ffffff")
-        .attr("stroke-width", (d, i) => {
-            if (highlightInfo && (highlightInfo.comparingKey === d.key || 
-                highlightInfo.compareKey === d.key || 
-                highlightInfo.insertedValue === d.key)) {
-                return 2;
-            }
-            return 1;
         });
 
     keyGroups.append("text")
@@ -118,6 +136,48 @@ function renderTree(tree, stepDescription = '', highlightInfo = null) {
         .attr("font-size", "16px")
         .attr("font-weight", "bold")
         .text(d => d.key);
+
+    function showTooltip(tooltip, x, y, text) {
+        tooltip.select("text")
+            .text(text);
+
+        const bbox = tooltip.select("text").node().getBBox();
+        
+        tooltip.select("rect")
+            .attr("x", -bbox.width/2 - 5)
+            .attr("y", -bbox.height/2)
+            .attr("width", bbox.width + 10)
+            .attr("height", bbox.height + 4);
+
+        tooltip
+            .attr("transform", `translate(${x},${y})`)
+            .transition()
+            .duration(200)
+            .style("opacity", 1);
+    }
+
+    function getTransformedPosition(transform1, transform2) {
+        const t1 = parseTransform(transform1);
+        const t2 = parseTransform(transform2);
+        return [t1.x + t2.x, t1.y + t2.y];
+    }
+
+    function parseTransform(transform) {
+        const match = transform.match(/translate\(([^,]+),([^)]+)\)/);
+        if (match) {
+            return {
+                x: parseFloat(match[1]),
+                y: parseFloat(match[2])
+            };
+        }
+        return { x: 0, y: 0 };
+    }
+
+    if (!highlightInfo || !highlightInfo.comparingKey) {
+        tooltip.transition()
+            .duration(200)
+            .style("opacity", 0);
+    }
 }
 
 class BTree {
@@ -224,22 +284,32 @@ class BTreeNode {
         let i = this.keys.length - 1;
 
         if (this.isLeaf) {
-            while (i >= 0 && this.keys[i] > value) {
+            // Show comparison with each key from right to left
+            for (let j = this.keys.length - 1; j >= 0; j--) {
                 await tree.visualizeStep(
-                    `Comparing ${value} with ${this.keys[i]}`,
-                    { comparingKey: this.keys[i] }
+                    `Comparing ${value} with ${this.keys[j]}`,
+                    { comparingKey: this.keys[j], value: value }
                 );
-                i--;
+                if (this.keys[j] <= value) {
+                    i = j;
+                    break;
+                }
+                i = j - 1;
             }
             this.keys.splice(i + 1, 0, value);
             await tree.visualizeStep(`Inserted ${value} into leaf node`);
         } else {
-            while (i >= 0 && this.keys[i] > value) {
+            // Show comparison with each key from right to left
+            for (let j = this.keys.length - 1; j >= 0; j--) {
                 await tree.visualizeStep(
-                    `Comparing ${value} with ${this.keys[i]}`,
-                    { comparingKey: this.keys[i] }
+                    `Comparing ${value} with ${this.keys[j]}`,
+                    { comparingKey: this.keys[j], value: value }
                 );
-                i--;
+                if (this.keys[j] <= value) {
+                    i = j;
+                    break;
+                }
+                i = j - 1;
             }
             i++;
 
@@ -254,13 +324,27 @@ class BTreeNode {
     }
 
     async splitChild(index, childNode, tree) {
+        // First show tooltip about node size exceeded
+        await tree.visualizeStep(
+            `Node size exceeded maximum limit`,
+            { comparingKey: childNode.keys[Math.floor((2 * tree.order - 1) / 2)], 
+              value: "Node full" }
+        );
+
         const newNode = new BTreeNode(childNode.isLeaf);
         newNode.order = tree.order;
         
         const mid = Math.floor((2 * tree.order - 1) / 2);
+        const promotedKey = childNode.keys[mid];
+        
+        // Show tooltip about promoting the middle key
+        await tree.visualizeStep(
+            `Moving ${promotedKey} to parent node`,
+            { comparingKey: promotedKey, 
+              value: "Moving up" }
+        );
         
         newNode.keys = childNode.keys.splice(mid + 1);
-        const promotedKey = childNode.keys[mid];
         this.keys.splice(index, 0, promotedKey);
         childNode.keys.splice(mid);
         
@@ -270,7 +354,11 @@ class BTreeNode {
         
         this.children.splice(index + 1, 0, newNode);
         
-        await tree.visualizeStep(`Split node: promoted ${promotedKey}`);
+        // Show final state after split
+        await tree.visualizeStep(
+            `Split complete: ${promotedKey} moved up and node split into two parts`,
+            { compareKey: promotedKey }  // highlight the promoted key in yellow
+        );
     }
 
     visualize(x = 400, y = 50, width = 800, height = 100) {
@@ -465,7 +553,7 @@ class BTreeNode {
         while (index < this.keys.length && this.keys[index] < value) {
             await tree.visualizeStep(
                 `Comparing ${value} with ${this.keys[index]}`,
-                { comparingKey: this.keys[index] }
+                { comparingKey: this.keys[index], value: value }
             );
             index++;
         }
@@ -615,6 +703,32 @@ document.getElementById("updateButton").addEventListener("click", async () => {
         document.getElementById("updateNewInput").value = "";
     } else {
         alert("Please enter valid numbers for both values");
+    }
+});
+
+document.getElementById("initializeRandomButton").addEventListener("click", async () => {
+    const keySize = parseInt(document.getElementById("orderInput").value);
+    const count = parseInt(document.getElementById("randomCountInput").value);
+    
+    if (keySize >= 1 && count > 0) {
+        bTree = new BTree(Math.ceil((keySize + 1) / 2));
+        renderTree(bTree, `Tree initialized with max ${keySize} keys per node`);
+        
+        // Generate random unique values
+        const randomValues = new Set();
+        while(randomValues.size < count) {
+            randomValues.add(Math.floor(Math.random() * 100) + 1);
+        }
+        
+        // Insert random values
+        for (const value of randomValues) {
+            await bTree.insert(value);
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        
+        alert(`B-tree initialized with ${count} random values`);
+    } else {
+        alert("Please enter valid numbers for key size and count");
     }
 });
 
