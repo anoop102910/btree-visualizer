@@ -110,6 +110,8 @@ function renderTree(tree, stepDescription = '', highlightInfo = null) {
         .attr("fill", (d, i, nodes) => {
             if (highlightInfo && highlightInfo.comparingKey === d.key) {
                 const keyGroup = d3.select(nodes[i].parentNode);
+                const comparison = d3.select("g.tooltip")  // Select the tooltip directly
+                    .style("opacity", 1);  // Ensure tooltip is visible
                 keyGroup.append("text")
                     .attr("class", "comparison-tooltip")
                     .attr("text-anchor", "middle")
@@ -149,8 +151,12 @@ function renderTree(tree, stepDescription = '', highlightInfo = null) {
             .attr("width", bbox.width + 10)
             .attr("height", bbox.height + 4);
 
+        const adjustedY = y - bbox.height - 30;
+        
+        tooltip.raise();
+        
         tooltip
-            .attr("transform", `translate(${x},${y})`)
+            .attr("transform", `translate(${x},${adjustedY})`)
             .transition()
             .duration(200)
             .style("opacity", 1);
@@ -173,11 +179,14 @@ function renderTree(tree, stepDescription = '', highlightInfo = null) {
         return { x: 0, y: 0 };
     }
 
+    // Remove or comment out this block at the end of renderTree function
+    /*
     if (!highlightInfo || !highlightInfo.comparingKey) {
         tooltip.transition()
             .duration(200)
             .style("opacity", 0);
     }
+    */
 }
 
 class BTree {
@@ -222,8 +231,8 @@ class BTree {
         await this.visualizeStep(`Starting deletion of ${value}`);
         const result = await this.root.delete(value, this);
 
+        // If the root is empty, make its first child the new root
         if (this.root.keys.length === 0 && !this.root.isLeaf) {
-            await this.visualizeStep('Root is empty, adjusting tree height');
             this.root = this.root.children[0];
         }
 
@@ -559,49 +568,53 @@ class BTreeNode {
     async delete(value, tree) {
         let index = 0;
         
-        // Find the key to be deleted
+        // First phase: Finding the key
         while (index < this.keys.length && this.keys[index] < value) {
             await tree.visualizeStep(
-                `Comparing ${value} with ${this.keys[index]}`,
+                `Searching: Comparing ${value} with ${this.keys[index]}`,
                 { comparingKey: this.keys[index], value: value }
             );
             index++;
         }
 
-        // If the key is found in this node
+        // Second phase: Found the key or moving to child
         if (index < this.keys.length && this.keys[index] === value) {
-            await tree.visualizeStep(`Found ${value} at current node`);
+            await tree.visualizeStep(
+                `Found ${value} at current node!`,
+                { compareKey: this.keys[index] }
+            );
+            
             if (this.isLeaf) {
-                // Case 1: If node is leaf, simply remove the key
+                await tree.visualizeStep(
+                    `Deleting ${value} from leaf node`,
+                    { comparingKey: this.keys[index], value: "Deleting" }
+                );
                 this.keys.splice(index, 1);
-                await tree.visualizeStep(`Deleted ${value} from leaf node`);
+                await tree.visualizeStep(`Deleted ${value} successfully`);
                 return true;
             } else {
-                // Case 2: If node is internal, handle accordingly
                 return await this.deleteFromNonLeaf(index, tree);
             }
         }
 
-        // If the key is not found in this node
+        // If key not found in current node
         if (this.isLeaf) {
             await tree.visualizeStep(`${value} not found in tree`);
             return false;
         }
 
-        // Determine if the key to be deleted lies in the subtree rooted at index
-        const shouldRecurse = index === this.keys.length || value < this.keys[index];
-        
-        // Ensure the child node has enough keys before recurring
+        // If not leaf, search the last child
+        await tree.visualizeStep(
+            `Moving to child node to find ${value}`,
+            { comparingKey: this.keys[index < this.keys.length ? index : index-1], value: value }
+        );
+
+        // Check if child needs rebalancing
         if (this.children[index].keys.length < this.order) {
             await this.fillChild(index, tree);
         }
 
-        // If the last child has been merged
-        if (index > this.keys.length) {
-            return await this.children[index - 1].delete(value, tree);
-        } else {
-            return await this.children[index].delete(value, tree);
-        }
+        return await this.children[index].delete(value, tree);
     }
 
     async deleteFromNonLeaf(index, tree) {
